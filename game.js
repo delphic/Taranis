@@ -13,7 +13,6 @@ quat.rotate = (function() {
 	};
 })();
 
-var shouldAutoScale = true;
 var resolutionFactor = 1; // Lower this for low-spec devices
 var cameraRatio = 16 / 9;
 var updateCanvasSize = function() {
@@ -72,12 +71,11 @@ var vertexColorShader = Fury.Shader.create({
 
 var vertexColorMaterial = Fury.Material.create({ shader : vertexColorShader });
 
-
 // Create Camera & Scene
 var rotateRate = 0.1 * Math.PI, maxRotatePerFrame = 0.2 * rotateRate;
 var zoomRate = 16;
 var initalRotation = quat.create();
-var camera = Fury.Camera.create({ near: 0.1, far: 1000000.0, fov: 45.0, ratio: cameraRatio, position: vec3.fromValues(10.0, 10.0, 20.0), rotation: quat.fromValues(-0.232, 0.24, 0.06, 0.94) });
+var camera = Fury.Camera.create({ near: 0.1, far: 10000.0, fov: 45.0, ratio: cameraRatio, position: vec3.fromValues(10.0, 10.0, 20.0), rotation: quat.fromValues(-0.232, 0.24, 0.06, 0.94) });
 var scene = Fury.Scene.create({ camera: camera });
 var meshes = [];
 
@@ -195,11 +193,16 @@ var TrackPoint = (function() {
         }
     };
     
-    exports.create = function(position, forward) {
+    exports.create = function(position, forward, up) {
         var trackPoint = Object.create(proto);
         
         trackPoint.position = position;
         trackPoint.forward = forward;
+        if (up) {
+            trackPoint.up = up;
+        } else {
+            trackPoint.up = [0,1,0];
+        }
         trackPoint.color = colors[nextColorIndex];
         
         nextColorIndex = (nextColorIndex + 1) % colors.length;
@@ -214,11 +217,11 @@ var createTestTrack = function() {
     var trackPoints = [];
     
     trackPoints.push(TrackPoint.create([0,0,0], [0,0,1]));
-    trackPoints.push(TrackPoint.create([-1,2,2], [-1,0,0]));
-    trackPoints.push(TrackPoint.create([-2,1,1], [0,0,-1]));
-    trackPoints.push(TrackPoint.create([-3,0,1], [-0.5,0,0.5]));
-    trackPoints.push(TrackPoint.create([-4,0,2], [-1,0,0]));
-    trackPoints.push(TrackPoint.create([-5,0,0], [0.5,0,-0.5]));
+    trackPoints.push(TrackPoint.create([-1,2,2], [-1,0,0], [0, 1, -0.5]));
+    trackPoints.push(TrackPoint.create([-2,1,1], [0,0,-1], [-0.5,1,0]));
+    trackPoints.push(TrackPoint.create([-3,0,1], [-0.5,0,0.5], [0.25,1,0]));
+    trackPoints.push(TrackPoint.create([-4,0,2], [-1,0,0], [0,1,-0.5]));
+    trackPoints.push(TrackPoint.create([-5,0,0], [0.5,0,-0.5], [0.5, 1, 0]));
     trackPoints.push(TrackPoint.create([-4,-1,-1], [1,0,0]));
     trackPoints.push(TrackPoint.create([-2.5,-0.5,-0.5], [0.5,0,0]));
     trackPoints.push(TrackPoint.create([-1,0,-1], [1,0,0]));
@@ -227,7 +230,7 @@ var createTestTrack = function() {
 };
 
 var awake = function() {
-	// Note this needs to happen after materials loaded so that when they are copied the textures have loaded.
+	// Note this needs to happen after materials loaded so that when they are copied the textures have loaded.dw
 	// Perhaps textures should be stored at the Fury (Fury.Engine) level and thus loading callbacks will provide the texture to all materials
 	// who have that texture id and this will work even if they've been copied prior to texture load
 	// More sensible would giving Fury this awake / update functionality so we don't need to write it each time.
@@ -241,7 +244,40 @@ var awake = function() {
         current.mesh = generateCurveMesh(current.position, current.findControl1(next), current.findControl2(next), next.position, current.color, next.color, 30);
         meshes.push(current.mesh);
         scene.add({ material: vertexColorMaterial, mesh: current.mesh });
+        
+        var white = [1,1,1]; // TODO: a list of colors please
+        var up = [0, 1, 0];
+        var lp0 = [], lp1 = [], lp2 = [], lp3 = [], coffset = [], noffset = [];
+        coffset = vec3.cross(coffset, current.forward, current.up);
+        coffset = vec3.normalize(coffset, coffset);
+        coffset = vec3.scale(coffset, coffset, 0.1);
+        
+        noffset = vec3.cross(noffset, next.forward, next.up);
+        noffset = vec3.normalize(noffset, noffset);
+        noffset = vec3.scale(noffset, noffset, 0.1);
+        
+        vec3.subtract(lp0, current.position, coffset);
+        vec3.subtract(lp1, current.findControl1(next), coffset);
+        vec3.subtract(lp2, current.findControl2(next), noffset);
+        vec3.subtract(lp3, next.position, noffset);
+        
+        current.leftMesh = generateCurveMesh(lp0, lp1, lp2, lp3, white, white, 30);
+        meshes.push(current.leftMesh);
+        scene.add({ material: vertexColorMaterial, mesh: current.leftMesh });
+        
+        var rp0 = [], rp1 = [], rp2 = [], rp3 = [];
+        vec3.add(rp0, current.position, coffset);
+        vec3.add(rp1, current.findControl1(next), coffset);
+        vec3.add(rp2, current.findControl2(next), noffset);    // Change to using next.findControlPrev ? so make it cler the control point is based on next
+        vec3.add(rp3, next.position, noffset);
+        
+        current.rightMesh = generateCurveMesh(rp0, rp1, rp2, rp3, white, white, 30);
+        meshes.push(current.rightMesh);
+        scene.add({ material: vertexColorMaterial, mesh: current.rightMesh });
     }
+
+    // TODO: Some kind of inspector to change control points and regenerate mesh would be nice...
+    // TODO: Width based mesh
 
 	setClearColor(0, 0, 0);
 
