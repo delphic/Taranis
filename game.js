@@ -104,7 +104,7 @@ var addLineToScene = function(points, colors, closed) {
     scene.add({ material: vertexColorMaterial, mesh: mesh });
 };
 
-var generateCurveMesh = function(p0, p1, p2, p3, startColor, endColor, samples) {
+var generateCurvePoints = function(p0, p1, p2, p3, startColor, endColor, samples) {
     var points = [];
     var colors = [];
     var sampleSize = 1 / (samples - 1);
@@ -116,7 +116,7 @@ var generateCurveMesh = function(p0, p1, p2, p3, startColor, endColor, samples) 
     }
     points.push(Beizer.cubic(p0, p1, p2, p3, 1));
     colors.push(endColor);
-    return generateLineMesh(points, colors);
+    return { points: points, colors: colors };
 };
 
 var Beizer = (function() {
@@ -216,15 +216,15 @@ var TrackPoint = (function() {
 var createTestTrack = function() {
     var trackPoints = [];
     
-    trackPoints.push(TrackPoint.create([0,0,0], [0,0,1]));
-    trackPoints.push(TrackPoint.create([-1,2,2], [-1,0,0], [0, 1, -0.5]));
-    trackPoints.push(TrackPoint.create([-2,1,1], [0,0,-1], [-0.5,1,0]));
-    trackPoints.push(TrackPoint.create([-3,0,1], [-0.5,0,0.5], [0.25,1,0]));
-    trackPoints.push(TrackPoint.create([-4,0,2], [-1,0,0], [0,1,-0.5]));
-    trackPoints.push(TrackPoint.create([-5,0,0], [0.5,0,-0.5], [0.5, 1, 0]));
-    trackPoints.push(TrackPoint.create([-4,-1,-1], [1,0,0]));
-    trackPoints.push(TrackPoint.create([-2.5,-0.5,-0.5], [0.5,0,0]));
-    trackPoints.push(TrackPoint.create([-1,0,-1], [1,0,0]));
+    trackPoints.push(TrackPoint.create([0,0,0], [0,0,10]));
+    trackPoints.push(TrackPoint.create([-10,20,20], [-10,0,0], [0, 1, -0.5]));
+    trackPoints.push(TrackPoint.create([-20,10,10], [0,0,-10], [-0.5,1,0]));
+    trackPoints.push(TrackPoint.create([-30,0,10], [-5,0,5], [0.25,1,0]));
+    trackPoints.push(TrackPoint.create([-40,0,20], [-10,0,0], [0,1,-0.5]));
+    trackPoints.push(TrackPoint.create([-50,0,0], [5,0,-5], [0.5, 1, 0]));
+    trackPoints.push(TrackPoint.create([-40,-10,-10], [10,0,0]));
+    trackPoints.push(TrackPoint.create([-25,-5,-5], [5,0,0]));
+    trackPoints.push(TrackPoint.create([-10,0,-10], [10,0,0]));
 
     return trackPoints;
 };
@@ -237,33 +237,43 @@ var awake = function() {
     
     var trackPoints = createTestTrack();
 
+    var showLines = true;
+
     for (var i = 0, l = trackPoints.length; i < l; i++) {
         var current = trackPoints[i];
         var next = trackPoints[(i + 1)%l];
 
-        current.mesh = generateCurveMesh(current.position, current.findControl1(next), current.findControl2(next), next.position, current.color, next.color, 30);
-        meshes.push(current.mesh);
-        scene.add({ material: vertexColorMaterial, mesh: current.mesh });
+        current.points = generateCurvePoints(current.position, current.findControl1(next), current.findControl2(next), next.position, current.color, next.color, 30);
+        
+        /*if (showLines) {
+            current.mesh = generateLineMesh(current.points.points, current.points.colors); 
+            meshes.push(current.mesh);
+            scene.add({ material: vertexColorMaterial, mesh: current.mesh });
+        }*/
         
         var white = [1,1,1]; // TODO: a list of colors please
         var up = [0, 1, 0];
         var lp0 = [], lp1 = [], lp2 = [], lp3 = [], coffset = [], noffset = [];
         coffset = vec3.cross(coffset, current.forward, current.up);
         coffset = vec3.normalize(coffset, coffset);
-        coffset = vec3.scale(coffset, coffset, 0.1);
+        coffset = vec3.scale(coffset, coffset, 1);
         
         noffset = vec3.cross(noffset, next.forward, next.up);
         noffset = vec3.normalize(noffset, noffset);
-        noffset = vec3.scale(noffset, noffset, 0.1);
+        noffset = vec3.scale(noffset, noffset, 1);
         
         vec3.subtract(lp0, current.position, coffset);
         vec3.subtract(lp1, current.findControl1(next), coffset);
         vec3.subtract(lp2, current.findControl2(next), noffset);
         vec3.subtract(lp3, next.position, noffset);
         
-        current.leftMesh = generateCurveMesh(lp0, lp1, lp2, lp3, white, white, 30);
-        meshes.push(current.leftMesh);
-        scene.add({ material: vertexColorMaterial, mesh: current.leftMesh });
+        current.leftPoints = generateCurvePoints(lp0, lp1, lp2, lp3, white, white, 30); 
+        
+        if (showLines) {
+            current.leftMesh = generateLineMesh(current.leftPoints.points, current.leftPoints.colors);
+            meshes.push(current.leftMesh);
+            scene.add({ material: vertexColorMaterial, mesh: current.leftMesh });
+        }
         
         var rp0 = [], rp1 = [], rp2 = [], rp3 = [];
         vec3.add(rp0, current.position, coffset);
@@ -271,13 +281,65 @@ var awake = function() {
         vec3.add(rp2, current.findControl2(next), noffset);    // Change to using next.findControlPrev ? so make it cler the control point is based on next
         vec3.add(rp3, next.position, noffset);
         
-        current.rightMesh = generateCurveMesh(rp0, rp1, rp2, rp3, white, white, 30);
-        meshes.push(current.rightMesh);
-        scene.add({ material: vertexColorMaterial, mesh: current.rightMesh });
+        current.rightPoints = generateCurvePoints(rp0, rp1, rp2, rp3, white, white, 30);
+        
+        if (showLines) {
+            current.rightMesh = generateLineMesh(current.rightPoints.points, current.rightPoints.colors);
+            meshes.push(current.rightMesh);
+            scene.add({ material: vertexColorMaterial, mesh: current.rightMesh });
+        }
+        
+        var append = function(a, b) {
+            for(let i = 0; i < b.length; i++) {
+                a.push(b[i]);
+            }
+        };
+        
+        var vertices = [];
+        var colors = [];
+        var indices = [];
+        var index = 0;
+        for (var j = 0; j < 30; j++) {
+            // Vertex Diagram
+            // 3  4  5      <- j == 1
+            // 0  1  2      <- j == 0
+            append(vertices, current.leftPoints.points[j]);
+            append(vertices, current.points.points[j]);
+            append(vertices, current.rightPoints.points[j]);
+            append(colors, current.points.colors[j]);
+            append(colors, current.points.colors[j]);
+            append(colors, current.points.colors[j]);
+            
+            if (j > 0) {
+                var backLeft = 3*(j-1);
+                var backCentre = 3*(j-1)+1;
+                var backRight = 3*(j-1)+2;
+                var forwardLeft = 3*j;
+                var forwardCentre = 3*j + 1;
+                var forwardRight = 3*j + 2;
+                // Top Faces
+                indices.push(backLeft, forwardLeft, forwardCentre);
+                indices.push(backLeft, forwardCentre, backCentre);
+                indices.push(backCentre, forwardCentre, forwardRight);
+                indices.push(backCentre, forwardRight, backRight);
+                
+                // Bottom Faces
+                indices.push(backLeft, forwardCentre, forwardLeft);
+                indices.push(backLeft, backCentre, forwardCentre);
+                indices.push(backCentre, forwardRight, forwardCentre);
+                indices.push(backCentre, backRight, forwardRight);
+            }
+        }
+        var mesh = Fury.Mesh.create({ vertices: vertices, indices: indices });
+        mesh.vertexColors = colors;
+        mesh.colorBuffer = Fury.Renderer.createBuffer(colors, 3);
+        meshes.push(mesh);
+        scene.add({ mesh: mesh, material: vertexColorMaterial });
+        
     }
 
     // TODO: Some kind of inspector to change control points and regenerate mesh would be nice...
-    // TODO: Width based mesh
+    // Ability to inject another track point without affecting the existing shape
 
 	setClearColor(0, 0, 0);
 
@@ -296,6 +358,8 @@ var loop = function() {
 	var elapsed = Date.now() - lastTime;
 	lastTime += elapsed;
 	elapsed /= 1000;
+
+    // TODO: Picking... can has raycast?
 
 	handleInput(elapsed);
 	scene.render();
